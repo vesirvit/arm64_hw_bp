@@ -4,6 +4,7 @@
  */
 
 #include "arm64_hw_bp.h"
+#include "kallsyms_lookup_api.h"
 
 // 断点数据结构
 typedef struct _HW_BREAKPOINT_INFO {
@@ -534,7 +535,7 @@ static bool arm64_move_bp_to_next_instruction(struct perf_event *bp, uint64_t ne
     tmp_attr.bp_type = HW_BREAKPOINT_X;
     tmp_attr.disabled = 0;
     
-    return (modify_user_hw_breakpoint(bp, &tmp_attr) == 0);
+    return (modify_user_hw_breakpoint_sym(bp, &tmp_attr) == 0);
 }
 
 static bool arm64_recovery_bp_to_original(struct perf_event *bp, struct perf_event_attr *orig_attr)
@@ -543,7 +544,7 @@ static bool arm64_recovery_bp_to_original(struct perf_event *bp, struct perf_eve
         return false;
     
     orig_attr->disabled = 0;
-    return (modify_user_hw_breakpoint(bp, orig_attr) == 0);
+    return (modify_user_hw_breakpoint_sym(bp, orig_attr) == 0);
 }
 
 // 断点回调函数 - 修复版
@@ -688,7 +689,7 @@ static int set_hw_breakpoint(pid_t tid, uintptr_t addr, uint32_t type)
     attr.disabled = 0;
 
     // 创建断点
-    entry->info.pe = register_user_hw_breakpoint(&attr, hw_breakpoint_handler, entry, task);
+    entry->info.pe = register_user_hw_breakpoint_sym(&attr, hw_breakpoint_handler, entry, task);
     
     if (IS_ERR(entry->info.pe)) {
         ret = PTR_ERR(entry->info.pe);
@@ -729,7 +730,7 @@ static int clear_hw_breakpoint(pid_t tid, uintptr_t addr)
     list_for_each_entry_safe(entry, tmp, &bp_list, list) {
         if (entry->info.tid == tid && entry->info.addr == addr) {
             if (entry->info.pe) {
-                unregister_hw_breakpoint(entry->info.pe);
+                unregister_hw_breakpoint_sym(entry->info.pe);
                 entry->info.pe = NULL;
             }
             
@@ -761,7 +762,7 @@ static void clear_all_breakpoints(void)
     
     list_for_each_entry_safe(entry, tmp, &bp_list, list) {
         if (entry->info.pe) {
-            unregister_hw_breakpoint(entry->info.pe);
+            unregister_hw_breakpoint_sym(entry->info.pe);
             entry->info.pe = NULL;
         }
         
@@ -950,7 +951,12 @@ static struct miscdevice misc_dev = {
 static int __init driver_entry(void)
 {
     int ret;
-
+    
+    if (!init_kallsyms_lookup()) {
+        printk(KERN_ERR "Failed to Get Breakpoint Functions!!!");
+        return EBADF;
+    }
+    
     INIT_LIST_HEAD(&bp_list);
     atomic64_set(&g_hook_pc, 0);
     memset(&bullet_rot, 0, sizeof(bullet_rot));

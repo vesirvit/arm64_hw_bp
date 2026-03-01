@@ -38,9 +38,6 @@
 #include <linux/mmap_lock.h>
 #endif
 
-// 直接包含头文件，使用导出符号
-#include <linux/hw_breakpoint.h>
-
 // 设备名称 - 修改为独特名称避免冲突
 #define DEVICE_NAME "arm64_hw_bp"
 
